@@ -89,6 +89,9 @@ let rec test_case_count =
 let string_of_path path =
   String.concat ":" (List.rev_map string_of_node path)
 
+let string_of_path_PreTTY path =
+  String.concat "\x1B[90m:\x1B[0m" (List.rev_map string_of_node path)
+
 let buff_format_printf f = 
   let buff = Buffer.create 13 in
   let fmt = Format.formatter_of_buffer buff in

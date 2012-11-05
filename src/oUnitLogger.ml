@@ -6,6 +6,10 @@ open OUnitTypes
 open OUnitUtils
 
 type event_type = GlobalEvent of global_event | TestEvent of test_event
+type verbosity = Off | On | PreTTY
+
+let cur_path = ref []
+let t0 = ref (Unix.gettimeofday ())
 
 let format_event verbose event_type =
   match event_type with
@@ -36,8 +40,7 @@ let format_event verbose event_type =
                 let skips    = List.filter is_skip results in
                 let todos    = List.filter is_todo results in
 
-                  if not verbose then
-                    bprintf "\n";
+                  bprintf "\n";
 
                   print_results errors;
                   print_results failures;
@@ -69,29 +72,52 @@ let format_event verbose event_type =
     | TestEvent e ->
         begin
           let string_of_result = 
-            if verbose then
+            match verbose with
+            | PreTTY -> begin
+               function
+                | RSuccess _      -> "\x1B[92m\xE2\x9C\x93\x1B[0m "
+                | RFailure (_, _) -> "\x1B[91m\xD7[0m "
+                | RError (_, _)   -> "ERROR"
+                | RSkip (_, _)    -> "SKIP"
+                | RTodo (_, _)    -> "TODO"
+              end
+            | On -> begin
               function
-                | RSuccess _      -> "ok\n"
-                | RFailure (_, _) -> "FAIL\n"
-                | RError (_, _)   -> "ERROR\n"
-                | RSkip (_, _)    -> "SKIP\n"
-                | RTodo (_, _)    -> "TODO\n"
-            else
+                | RSuccess _      -> "ok"
+                | RFailure (_, _) -> "FAIL"
+                | RError (_, _)   -> "ERROR"
+                | RSkip (_, _)    -> "SKIP"
+                | RTodo (_, _)    -> "TODO"
+              end
+            | Off -> begin
               function
                 | RSuccess _      -> "."
                 | RFailure (_, _) -> "F"
                 | RError (_, _)   -> "E"
                 | RSkip (_, _)    -> "S"
                 | RTodo (_, _)    -> "T"
+              end
           in
-            if verbose then
+            if verbose <> Off then
               match e with 
                 | EStart p -> 
-                    Printf.sprintf "%s start\n" (string_of_path p)
-                | EEnd p -> 
-                    Printf.sprintf "%s end\n" (string_of_path p)
-                | EResult result -> 
-                    string_of_result result
+                    cur_path := p; t0 := Unix.gettimeofday ();
+                    Printf.sprintf "    %s%s" (string_of_path p) (if verbose <> PreTTY then "\n" else "")
+                | EEnd p -> ""
+                | EResult result ->
+                    let elapsed = (int_of_float (1000.0 *. (Unix.gettimeofday() -. !t0))) in
+                    let elapsed_str =
+                      if verbose = PreTTY then
+                        Printf.sprintf "\x1B[90m(%dms)\x1B[0m" elapsed
+                      else
+                        Printf.sprintf "(%dms)" elapsed
+                    in
+                    Printf.sprintf "%s %s %s %s\n"
+                      (if verbose = PreTTY then "\r" else "") (* on terminal, overwrite EStart line *)
+                      (string_of_result result)
+                      ((if verbose = PreTTY then string_of_path_PreTTY else string_of_path) !cur_path)
+                      elapsed_str
+                    (* TODO: would be nicer to refactor cur_path and t0 into EResult instead of using global vars*)
                 | ELog (lvl, str) ->
                     let prefix = 
                       match lvl with 
@@ -111,13 +137,13 @@ let format_event verbose event_type =
 let file_logger fn =
   let chn = open_out fn in
     (fun ev ->
-       output_string chn (format_event true ev);
+       output_string chn (format_event On ev);
        flush chn),
     (fun () -> close_out chn)
 
 let std_logger verbose =
   (fun ev -> 
-     print_string (format_event verbose ev);
+     print_string (format_event (if verbose then (if Unix.isatty Unix.stdout then PreTTY else On) else Off) ev);
      flush stdout),
   (fun () -> ())
 
