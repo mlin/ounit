@@ -501,7 +501,7 @@ let run_test_tt ?verbose test =
   let log, log_close = 
     OUnitLogger.create 
       !global_output_file 
-      !global_verbose 
+      (match verbose with Some b -> b | None -> !global_verbose)
       OUnitLogger.null_logger
   in
   let () = 
