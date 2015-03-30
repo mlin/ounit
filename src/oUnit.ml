@@ -494,7 +494,9 @@ let perform_test report test =
    of the function, and the original result in a tuple *)
 let time_fun f x y =
   let begin_time = Unix.gettimeofday () in
-    (Unix.gettimeofday () -. begin_time, f x y)
+  let result = f x y in
+  let end_time = Unix.gettimeofday () in
+    (end_time -. begin_time, result)
 
 (* A simple (currently too simple) text based test runner *)
 let run_test_tt ?verbose test =
